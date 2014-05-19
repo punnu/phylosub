@@ -1,5 +1,7 @@
 # code to generate partial order plots
 
+#updated code: will consider only tree with max likelihood , removed check for minimum edge weight of 0.09 for useful results.
+
 import cPickle
 
 from numpy	  import *
@@ -33,37 +35,38 @@ def print_porder(fdir,dname,fout):
 	flist = sort(array(flist,float))[::-1]
 	ns = len(flist) #number of MCMC samples
 	
-	for idx,fname in enumerate(flist):
-		f=open('./'+fdir+'/'+str(fname))
-		tssb = cPickle.load(f)
-		f.close()
-		
-		def descend(root):	
-			for child in root.children():
-				cids = [glist[datum.name] for datum in child.get_data()]
-				ancestors = [child.parent()] 
-				for anc in ancestors:				
-					pids = [glist[datum.name] for datum in anc.get_data()]
-					ids=[(p,c) for p in pids for c in cids]
-					for id in ids: W[id[0],id[1]]+=1
-				descend(child)
-		descend(tssb.root['node'])
+	fname = flist[0]
+	#for idx,fname in enumerate(flist):
+	f=open('./'+fdir+'/'+str(fname))
+	tssb = cPickle.load(f)
+	f.close()
 	
+	def descend(root):	
+		for child in root.children():
+			cids = [glist[datum.name] for datum in child.get_data()]
+			ancestors = [child.parent()] 
+			for anc in ancestors:				
+				pids = [glist[datum.name] for datum in anc.get_data()]
+				ids=[(p,c) for p in pids for c in cids]
+				for id in ids: W[id[0],id[1]]+=1
+			descend(child)
+	descend(tssb.root['node'])
+
+	
+	#cluster info
+	wts, nodes = tssb.get_mixture()
+	for node in nodes:
+		data = node.get_data()
+		for datum in data: nparams[datum.name]+=around(node.params,2)
 		
-		#cluster info
-		wts, nodes = tssb.get_mixture()
-		for node in nodes:
-			data = node.get_data()
-			for datum in data: nparams[datum.name]+=around(node.params,2)
-			
-			pids = [glist[datum.name] for datum in data];npids=len(pids)			
-			nids = setdiff1d(arange(m),pids);nnids=len(nids)
-			ids=[(pids[i],pids[j]) for i in arange(npids) for j in arange(npids)]
-			for id in ids: 
-				C[id[0],id[1]]+=1 # same cluster
-				S[id[0],id[1]]+=1 # same cluster
-			ids=[(i,j) for i in pids for j in nids]
-			for id in ids: C[id[0],id[1]]-=1; C[id[1],id[0]]-=1 # different cluster
+		pids = [glist[datum.name] for datum in data];npids=len(pids)			
+		nids = setdiff1d(arange(m),pids);nnids=len(nids)
+		ids=[(pids[i],pids[j]) for i in arange(npids) for j in arange(npids)]
+		for id in ids: 
+			C[id[0],id[1]]+=1 # same cluster
+			S[id[0],id[1]]+=1 # same cluster
+		ids=[(i,j) for i in pids for j in nids]
+		for id in ids: C[id[0],id[1]]-=1; C[id[1],id[0]]-=1 # different cluster
 	
 	for key in nparams.keys():nparams[key]=nparams[key]*1./ns
 	
@@ -77,7 +80,7 @@ def print_porder(fdir,dname,fout):
 	C = around(array(cc_lp(C)))
 	z = get_cluster_assignments(C)
 	
-	W = around(W*1./ns,2)
+	W = around(W*1./ns,4)
 
 	#glist = dict([(i,datum.name+' ('+str(round(nparams[datum.name],2)) + ')') for i,datum in enumerate(codes)])
 	glist = dict([(i,datum.name) for i,datum in enumerate(codes)])
@@ -112,7 +115,7 @@ def draw_graph(W,glist,z,fout='x'):
 	edges = where(W!=0)
 	edges = zip(edges[0],edges[1])
 	for e in edges:
-		if W[e[0],e[1]] < 0.09: continue
+		#if W[e[0],e[1]] < 0.09: continue
 		if W[e[0],e[1]] >= 0: 
 			G.add_edge(glist[e[0]],glist[e[1]],penwidth=5*(W[e[0],e[1]]))
 		else:
